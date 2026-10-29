@@ -6,3 +6,4 @@ __pycache__/
 
 requests.sqlite3
 operator_messages.sqlite3
+/service_studio_bot/data/bot.sqlite3

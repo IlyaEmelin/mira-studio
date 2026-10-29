@@ -469,3 +469,165 @@ python -c "import sqlite3; con=sqlite3.connect('data/bot.sqlite3'); print(con.ex
 15. Провести полный ручной сценарий.
 16. Проверить отсутствие секретов.
 17. Зафиксировать итоговый статус проекта.
+
+## Статус выполнения
+
+Обновлено: 2026-10-29.
+
+### Выполнено
+
+- `requirements.txt` пересоздан как обычный текстовый файл без NUL-байтов и содержит:
+  - `python-dotenv==1.2.2`;
+  - `aiogram==3.28.2`.
+- `.env.example` приведён к согласованным переменным:
+  - `BOT_TOKEN`;
+  - `OWNER_CHAT_ID`;
+  - `DB_PATH`.
+- Из `.env.example` удалён `ADMIN_CHAT_ID`, чтобы в проекте использовался только `OWNER_CHAT_ID`.
+- `.gitignore` дополнен правилом `data/*.sqlite3`.
+- Создана директория `data/` с файлом `data/.gitkeep`.
+- Создана директория `service_studio_bot/`.
+- Создан файл `service_studio_bot/main.py`.
+- В `service_studio_bot/main.py` реализовано:
+  - загрузка `.env` через `load_dotenv()`;
+  - чтение `BOT_TOKEN`, `OWNER_CHAT_ID`, `DB_PATH`;
+  - проверка обязательного `BOT_TOKEN` без вывода токена в лог;
+  - безопасная обработка отсутствующего или некорректного `OWNER_CHAT_ID`;
+  - logging уровня `INFO`;
+  - FAQ-ответы Mira Studio;
+  - inline FAQ-клавиатура;
+  - обработчик `/start`;
+  - callback-обработчики FAQ-кнопок;
+  - callback-кнопка «Связаться с оператором»;
+  - FSM-состояние ожидания обращения;
+  - обработка следующего текстового сообщения как обращения;
+  - обработка не текстового сообщения в режиме обращения;
+  - поиск FAQ-ответа по ключевым словам;
+  - fallback для неизвестного текста;
+  - создание SQLite-директории;
+  - создание таблицы `operator_requests`;
+  - сохранение обращения в SQLite;
+  - уведомление владельца через `OWNER_CHAT_ID`, если он корректен;
+  - запуск long polling.
+
+### Частично выполнено
+
+- Финальная ручная проверка в Telegram не выполнена в этой среде, потому что она требует интерактивного доступа к настоящему Telegram-боту, отправки сообщений пользователем и проверки уведомления владельцу.
+- Код подготовлен к ручной проверке командой:
+
+```powershell
+python service_studio_bot/main.py
+```
+
+## Проверки
+
+### Автоматические проверки
+
+Выполнены команды:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Результат: успешно. Зависимости `aiogram==3.28.2` и `python-dotenv==1.2.2` установлены.
+
+```powershell
+python -c "import sys; print(sys.executable); import aiogram; import dotenv; print('aiogram', aiogram.__version__); print('dotenv_ok')"
+```
+
+Результат: успешно. Используется `C:\Python313\python.exe`, импорт `aiogram` и `dotenv` работает, версия `aiogram` — `3.28.2`.
+
+```powershell
+python -m py_compile service_studio_bot/main.py
+```
+
+Результат: успешно. Синтаксических ошибок нет.
+
+```powershell
+python -c "from pathlib import Path; import sqlite3, tempfile, uuid; from service_studio_bot.main import init_database, save_operator_request, find_faq_answer; db=Path(tempfile.gettempdir())/f'mira_studio_bot_check_{uuid.uuid4().hex}.sqlite3'; init_database(db); save_operator_request(db, 1, 'tester', 'Тестовое обращение', '2026-10-29T00:00:00+00:00'); rows=sqlite3.connect(db).execute('select id, telegram_user_id, username, message_text, created_at from operator_requests').fetchall(); assert rows and rows[0][1] == 1; assert '1500' in find_faq_answer('Какая стоимость?'); assert 'запис' in find_faq_answer('Как записаться?').casefold(); assert find_faq_answer('У меня другой вопрос') is None; print('sqlite_and_matching_ok', db)"
+```
+
+Результат: успешно. Проверены создание SQLite-базы, вставка обращения и поиск FAQ по ключевым словам.
+
+```powershell
+python -c "from pathlib import Path; b=Path('requirements.txt').read_bytes(); print(b[:40]); print('nul_count', b.count(bytes([0])))"
+```
+
+Результат: успешно. `requirements.txt` не содержит NUL-байтов.
+
+```powershell
+Get-ChildItem -Recurse -Force -File -Exclude .env | Where-Object { $_.FullName -notmatch '\\.venv\\|\\.git\\' } | Select-String -Pattern '[0-9]{8,10}:[A-Za-z0-9_-]{30,}'
+```
+
+Результат: совпадений не найдено. Реальный Telegram bot token не найден в проектных файлах, исключая `.env`, `.venv` и `.git`.
+
+```powershell
+git --no-pager status --short
+```
+
+Результат на момент проверки:
+
+```text
+ M .env.example
+ M .gitignore
+ M requirements.txt
+?? data/
+?? service_studio_bot/
+```
+
+### Ручные проверки
+
+Не выполнены автоматически:
+
+- запуск настоящего long polling с реальным `BOT_TOKEN`;
+- `/start` в Telegram;
+- нажатие FAQ-кнопок в Telegram;
+- текстовые вопросы в Telegram;
+- fallback в Telegram;
+- отправка обращения через кнопку «Связаться с оператором»;
+- проверка уведомления владельцу в Telegram;
+- проверка перезапуска бота после ручного сценария.
+
+Эти проверки нужно выполнить вручную после запуска локального процесса.
+
+## Ошибки и решения
+
+### Ошибка 1. `ModuleNotFoundError: No module named 'aiogram'`
+
+Контекст: быстрая проверка импорта была запущена параллельно с установкой зависимостей.
+
+Статус: решено.
+
+Решение: после завершения `python -m pip install -r requirements.txt` импорт `aiogram` и `dotenv` успешно проверен повторно.
+
+### Ошибка 2. `PermissionError` при удалении временной SQLite-базы на Windows
+
+Контекст: проверка SQLite и keyword matching успешно вывела `sqlite_and_matching_ok`, но затем упала на удалении временного файла SQLite из-за Windows file lock.
+
+Статус: решено.
+
+Решение: проверка была повторена с уникальным временным файлом и без немедленного удаления занятого файла. SQLite-сценарий и keyword matching успешно подтверждены.
+
+## Следующий шаг
+
+Следующий шаг — выполнить ручную проверку в Telegram:
+
+1. Убедиться, что локальный `.env` содержит настоящий `BOT_TOKEN`, корректный `OWNER_CHAT_ID` и `DB_PATH=data/bot.sqlite3`.
+2. Запустить:
+
+```powershell
+python service_studio_bot/main.py
+```
+
+3. В Telegram проверить сценарии:
+   - `/start`;
+   - две или больше FAQ-кнопки;
+   - `Какая стоимость?`;
+   - `Как записаться?`;
+   - `Где вы находитесь?`;
+   - `У меня другой вопрос`;
+   - «Связаться с оператором»;
+   - отправка тестового обращения;
+   - получение уведомления владельцем;
+   - строка в SQLite;
+   - повторный запуск без очистки базы.
